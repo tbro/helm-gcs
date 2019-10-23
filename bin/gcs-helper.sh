@@ -1,5 +1,10 @@
 #!/bin/bash -e
 
+if [ -z ${GCLOUD_OAUTH_TOKEN+x} ]; then
+    echo "please set GCLOUD_OAUTH_TOKEN in your environment"
+    exit 1
+fi
+
 function usage() {
   if [[ ! -z "$1" ]]; then
     printf "$1\n\n"
@@ -28,15 +33,21 @@ function usage() {
 }
 
 COMMAND=$1
+STORAGE_HOST=https://storage.googleapis.com
+AUTH_STRING="Authorization: Bearer ${GCLOUD_OAUTH_TOKEN}"
 
 case $COMMAND in
 init)
-  BUCKET=$2
+  PROTO="$(echo $2 | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+  BUCKET="$(echo ${2/$PROTO/})"
   if [[ -z "$2" ]]; then
-    usage "Error: Please provide a bucket URL in the format gs://BUCKET"
+    usage "Error: Please provide a bucket name"
     exit 1
   else
-    gsutil cp -n $HELM_PLUGIN_DIR/etc/index.yaml $BUCKET
+      curl -s --upload-file ${HELM_PLUGIN_DIR}/etc/index.yaml \
+           -H "${AUTH_STRING}" \
+           "${STORAGE_HOST}/${BUCKET}/index.yaml"
+
     echo "Repository initialized..."
     exit 0
   fi
@@ -47,17 +58,27 @@ push)
     exit 1
   fi
   CHART_PATH=$2
-  BUCKET=$3
+  PROTO="$(echo $3 | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+  BUCKET="$(echo ${3/$PROTO/})"
   TMP_DIR=$(mktemp -d)
   TMP_REPO=$TMP_DIR/repo
   OLD_INDEX=$TMP_DIR/old-index.yaml
 
-  gsutil cat $BUCKET/index.yaml > $OLD_INDEX
+  curl -s -o ${OLD_INDEX} -H "${AUTH_STRING}" \
+       "${STORAGE_HOST}/${BUCKET}/index.yaml"
+
   mkdir $TMP_REPO
   cp $CHART_PATH $TMP_REPO
-  helm repo index --merge $OLD_INDEX --url $BUCKET $TMP_REPO
-  gsutil cp $TMP_REPO/index.yaml $BUCKET
-  gsutil cp $TMP_REPO/$(basename $CHART_PATH) $BUCKET
+  helm repo index --merge $OLD_INDEX --url $STORAGE_HOST/$BUCKET $TMP_REPO
+
+  curl -s --upload-file "${TMP_REPO}/index.yaml" \
+       -H "${AUTH_STRING}" \
+       "${STORAGE_HOST}/${BUCKET}/"
+
+  curl -s --upload-file "$TMP_REPO/$(basename $CHART_PATH)" \
+       -H "${AUTH_STRING}" \
+       "${STORAGE_HOST}/${BUCKET}/"
+
   echo "Repository initialized..."
   ;;
 *)

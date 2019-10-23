@@ -1,7 +1,7 @@
 # helm-gcs
 Helm plugin for using Google Cloud Storage as a private chart repository.
 
-## THIS IS NOT AN OFFICIAL GOOGLE PRODUCT
+## THIS IS (REALLY) NOT AN OFFICIAL GOOGLE PRODUCT
 
 ## Install
 
